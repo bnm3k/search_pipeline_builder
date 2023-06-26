@@ -1,16 +1,17 @@
-from bs4 import BeautifulSoup
 import calendar
 import datetime
 import urllib.parse
 import re
 
+import requests
+from bs4 import BeautifulSoup
+
 
 def main():
 
-    html_doc = None
-    filename = "issue_list.html"
-    with open(filename, "rb") as f:
-        html_doc = f.read()
+    issue_list_url = "https://postgresweekly.com/issues"
+    res = requests.get(issue_list_url)
+    html_doc = res.content
 
     soup = BeautifulSoup(html_doc, "html.parser")
     issues_elem = soup.find("div", class_="issues")
