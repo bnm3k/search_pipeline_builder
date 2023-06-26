@@ -5,7 +5,7 @@ SHELL:=/usr/bin/bash
 .PHONY: run format clean
 
 run:
-	python main.py
+	python parse_issue_list.py
 
 format:
 	black .
