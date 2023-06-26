@@ -2,45 +2,37 @@ import calendar
 import datetime
 import urllib.parse
 import re
-from pathlib import Path
 import os
+import logging
 
 import requests
 from tqdm import tqdm
 from bs4 import BeautifulSoup
 
+null_logger = logging.getLogger("null")
+null_logger.addHandler(logging.NullHandler())
 
-def main():
-    # config
-    data_dir_arg = "data/"
-    base_url = "https://postgresweekly.com/issues"
 
-    # check data dir path
-    data_dir_path = os.path.abspath(data_dir_arg)
-    if not os.path.isdir(data_dir_path):
-        raise Exception(f"Invalid data dir path: '{data_dir_path}'")
-    print(f"data dir set to: '{data_dir_path}'")
-
-    # get list of issues
+def get_issues_list(list_file_path, logger=null_logger):
     list_html_doc = None
-    list_file_name = "list.html"
-    list_file_path = os.path.join(data_dir_path, list_file_name)
     try:
         # check if file exists, if so read
         with open(list_file_path, "rb") as f:
             list_html_doc = f.read()
-        print(f"read list.html from file: {list_file_path}")
+            logger.info(f"read list.html from file: {list_file_path}")
     except FileNotFoundError:
         # if not downloaded, save as file, then read
         list_url = urllib.parse.urljoin(base_url, "/issues")
         res = requests.get(list_url)
-        print(f"downloaded list.html from web: {list_url}")
+        logger.info(f"downloaded list.html from web: {list_url}")
         list_html_doc = res.content
         with open(list_file_path, "wb") as f:
             f.write(res.content)
-            print(f"written list.html to: {list_file_path}")
+            logger.info(f"written list.html to: {list_file_path}")
+    return list_html_doc
 
-    # parse list of issues
+
+def parse_issues_list(list_html_doc, base_url, logger=null_logger):
     soup = BeautifulSoup(list_html_doc, "html.parser")
     div_issues = soup.find("div", class_="issues")
     children = div_issues.find_all("div", class_="issue")
@@ -64,6 +56,28 @@ def main():
         publish_date = datetime.date(year, month_num, day)
         issues.append((issue_id, publish_date, relateive_url))
 
+    return issues
+
+
+def ensure_issues_present(logger=null_logger):
+    # config
+    data_dir_arg = "data/"
+    base_url = "https://postgresweekly.com/issues"
+
+    # check data dir path
+    data_dir_path = os.path.abspath(data_dir_arg)
+    if not os.path.isdir(data_dir_path):
+        raise Exception(f"Invalid data dir path: '{data_dir_path}'")
+    logger.info(f"data dir set to: '{data_dir_path}'")
+
+    # get list of issues
+    list_file_name = "list.html"
+    list_file_path = os.path.join(data_dir_path, list_file_name)
+    list_html_doc = get_issues_list(list_file_path, logger)
+
+    # parse list of issues
+    issues = parse_issues_list(list_html_doc, base_url, logger)
+
     # make sure issues dir exists
     issues_dir_path = os.path.join(data_dir_path, "issues")
     if not os.path.isdir(issues_dir_path):
@@ -84,8 +98,14 @@ def main():
                 f.write(res.content)
             downloaded.append(issue_id)
 
-    print(f"downloaded issues: {len(downloaded)}/{len(issues)}")
-    print(f"already present issues: {len(already_present)}/{len(issues)}")
+    logger.info(f"downloaded issues: {len(downloaded)}/{len(issues)}")
+    logger.info(f"already present issues: {len(already_present)}/{len(issues)}")
+
+
+def main():
+    logging.getLogger().setLevel(logging.INFO)
+    logging.basicConfig(format="%(message)s")
+    ensure_issues_present(logger=logging)
 
 
 if __name__ == "__main__":
