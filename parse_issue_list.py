@@ -2,6 +2,7 @@ import calendar
 import datetime
 import urllib.parse
 import re
+import timeit
 
 import requests
 from bs4 import BeautifulSoup
@@ -22,6 +23,7 @@ def main():
     )
     base_url = "https://postgresweekly.com"
     month_name_to_num = {m: i for i, m in enumerate(calendar.month_name)}
+    links = []
     for div in issues:
         link = urllib.parse.urljoin(base_url, div.a.get("href"))
 
@@ -37,7 +39,16 @@ def main():
         day = int(match.group("day"))
         year = int(match.group("year"))
         date = datetime.date(year, month_num, day)
-        print(issue_id, date, link)
+        links.append((issue_id, link))
+
+    for (issue_id, issue_url) in links:
+        start = timeit.timeit()
+        res = requests.get(issue_url)
+        filename = f"issues/issue_{issue_id}.html"
+        with open(filename, "wb") as f:
+            f.write(res.content)
+        end = timeit.timeit()
+        print(f"downloaded issue: {issue_id}, time taken: {end-start}")
 
 
 if __name__ == "__main__":
