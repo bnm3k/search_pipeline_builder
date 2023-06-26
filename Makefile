@@ -5,7 +5,7 @@ SHELL:=/usr/bin/bash
 .PHONY: run format clean
 
 run:
-	python get_content.py
+	python get_issues.py
 
 format:
 	black .
