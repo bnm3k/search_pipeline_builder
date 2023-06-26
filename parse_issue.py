@@ -1,0 +1,84 @@
+from collections import namedtuple
+
+from bs4 import BeautifulSoup
+
+Entry = namedtuple(
+    "Entry", ["title", "author", "content", "main_link", "other_links"]
+)
+
+
+def parse_entries(html_doc):
+    soup = BeautifulSoup(html_doc, "html.parser")
+    content_elem = soup.find("div", id="content")
+    if content_elem is None:
+        raise Exception(f"div content not present")
+
+    def is_entry(elem):
+        # tag must be table
+        if elem.name != "table":
+            return False
+        classes = elem.get_attribute_list("class")
+        if "el-item" not in classes and "item" not in classes:
+            return False
+        return True
+
+    entries = []
+    entries_elems = content_elem.find_all(is_entry)
+
+    for entry_elem in entries_elems:
+        # get content
+        content_elem = entry_elem.find("p", class_="desc")
+        content = content_elem.text.strip()
+
+        # get all links
+        all_links = []
+        for a_elem in entry_elem.find_all("a"):
+            all_links.append(a_elem.get("href"))
+
+        # get main link & title
+        main_link = None
+        title = None
+        main_link_elem = content_elem.find("span", class_="mainlink")
+        if main_link_elem is not None:
+            main_link = main_link_elem.find("a").get("href")
+            title = main_link_elem.text
+            content = content.removeprefix(title).removeprefix(" — ")
+            all_links.remove(main_link)
+        elif len(all_links) == 1:
+            main_link = all_links[0]
+            all_links = []
+
+        # get author name
+        author = None
+        author_elem = entry_elem.find("p", class_="name") or content_elem.find(
+            "span", class_="name"
+        )
+        if author_elem is not None:
+            author = author_elem.text
+
+        if title is None:
+            title = content.removesuffix(author).strip()
+            content = None
+        entry = Entry(
+            title=title,
+            author=author,
+            content=content,
+            main_link=main_link,
+            other_links=all_links,
+        )
+        entries.append(entry)
+    return entries
+
+
+def main():
+    issue_file_path = "data/issues/issue_511.html"
+    issue_html_doc = None
+    with open(issue_file_path, "r") as f:
+        issue_html_doc = f.read()
+    entries = parse_entries(issue_html_doc)
+    for e in entries:
+        print(e, end="\n\n")
+
+
+if __name__ == "__main__":
+    main()
