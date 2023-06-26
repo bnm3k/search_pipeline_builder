@@ -1,17 +1,22 @@
 import os
+import re
 from collections import namedtuple
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 
 from get_issues import get_issues_list, parse_issues_list
 
 Entry = namedtuple(
-    "Entry", ["title", "author", "content", "main_link", "other_links"]
+    "Entry", ["title", "author", "content", "main_link", "other_links", "tag"]
 )
 
 
-def parse_entries_A(html_doc):
-    soup = BeautifulSoup(html_doc, "html.parser")
+def remove_query_params(url):
+    return urlparse(url)._replace(query=None).geturl()
+
+
+def strategy_1(soup):
     content_elem = soup.find("div", id="content")
     if content_elem is None:
         raise Exception(f"div content not present")
@@ -68,50 +73,97 @@ def parse_entries_A(html_doc):
             content=content,
             main_link=main_link,
             other_links=all_links,
+            tag=None,
         )
         entries.append(entry)
     return entries
 
 
-def get_entries():
-    issue_file_path = "data/issues/issue_511.html"
-    issue_html_doc = None
-    with open(issue_file_path, "r") as f:
-        issue_html_doc = f.read()
-    entries = parse_entries(issue_html_doc)
-    for e in entries:
-        print(e, end="\n\n")
+def strategy_2(soup):
+    entries_elems = soup.find_all("table", class_="item")
+    if len(entries_elems) < 1:
+        raise Exception("no entry elems")
+
+    metadata_pattern = re.compile(r"^.*#(\w+).*$")
+    entries = []
+    for entry_elem in entries_elems:
+        # get main link
+        main_a_elem = entry_elem.find("a", class_="primary")
+        main_link = remove_query_params(main_a_elem.get("href"))
+        title = main_a_elem.get_text()
+
+        content_elem = main_a_elem.parent.find_next_sibling("div")
+        content = content_elem.text
+
+        other_links = [
+            remove_query_params(e.get("href"))
+            for e in content_elem.find_all("a")
+        ]
+
+        # get author and tag
+        metadata_elem = entry_elem.find("td", class_="metadata")
+        metadata_text = metadata_elem.get_text().strip()
+        match = metadata_pattern.search(metadata_text)
+        if match:
+            tag = match.group(1)
+            author = metadata_text.removesuffix(tag).removesuffix("#").strip()
+        else:
+            tag = None
+            author = metadata_text
+        entry = Entry(
+            title=title,
+            author=author,
+            content=content,
+            main_link=main_link,
+            other_links=other_links,
+            tag=tag,
+        )
+        entries.append(entry)
+
+    return entries
+
+
+def parse_entries(html_doc):
+    soup = BeautifulSoup(html_doc, "html.parser")
+    last_exception = None
+    for strategy in [strategy_2]:
+        try:
+            entries = strategy(soup)
+            return entries
+        except Exception as e:
+            last_exception = e
+    raise last_exception
 
 
 def main():
-    # config
-    data_dir_path = "data/"
-    base_url = "https://postgresweekly.com/issues"
+    failures_csv = "failures.csv"
+    new_failures_csv = "new_failures.csv"
+    failure_lines = []
+    with open(failures_csv, "r") as f:
+        failure_lines = list(f.readlines())
 
-    # get list of issues
-    list_html_doc = get_issues_list(os.path.join(data_dir_path, "list.html"))
-    issues = parse_issues_list(list_html_doc, base_url)
     get_issue_file_path = lambda issue_id: os.path.join(
-        data_dir_path, "issues", f"issue_{issue_id}.html"
+        "data/", "issues", f"issue_{issue_id}.html"
     )
 
+    successes = []
     failures = []
-    for issue in issues:
-        issue_id = issue[0]
+    nf = open(new_failures_csv, "w")
+    for line in failure_lines:
+        issue_id = int(line.split(",")[0].strip())
         issue_html_doc = None
         with open(get_issue_file_path(issue_id), "rb") as f:
             issue_html_doc = f.read()
-
         try:
-            entries = parse_entries_A(issue_html_doc)
-        except Exception:
-            failures.append(issue)
+            entries = parse_entries(issue_html_doc)
+            successes.append(issue_id)
+        except Exception as e:
+            failures.append(issue_id)
+            nf.write(line)
+    nf.close()
 
-    # print(f"Able to parse {len(successes)}/{len(issues)} successfully")
-    failures.sort(key=lambda t: t[1], reverse=True)
-    with open("failures.csv", "w") as f:
-        for (issue_id, date, _) in failures:
-            f.write(f"{issue_id}, {date} \n")
+    print(f"failures: {len(failures)}")
+    print(f"successes: {len(successes)}")
 
 
 if __name__ == "__main__":
