@@ -1,6 +1,9 @@
+import os
 from collections import namedtuple
 
 from bs4 import BeautifulSoup
+
+from get_issues import get_issues_list, parse_issues_list
 
 Entry = namedtuple(
     "Entry", ["title", "author", "content", "main_link", "other_links"]
@@ -70,7 +73,7 @@ def parse_entries(html_doc):
     return entries
 
 
-def main():
+def get_entries():
     issue_file_path = "data/issues/issue_511.html"
     issue_html_doc = None
     with open(issue_file_path, "r") as f:
@@ -78,6 +81,36 @@ def main():
     entries = parse_entries(issue_html_doc)
     for e in entries:
         print(e, end="\n\n")
+
+
+def main():
+    # config
+    data_dir_path = "data/"
+    base_url = "https://postgresweekly.com/issues"
+
+    # get list of issues
+    list_html_doc = get_issues_list(os.path.join(data_dir_path, "list.html"))
+    issues = parse_issues_list(list_html_doc, base_url)
+    get_issue_file_path = lambda issue_id: os.path.join(
+        data_dir_path, "issues", f"issue_{issue_id}.html"
+    )
+
+    successes = []
+    failures = []
+    for (issue_id, _, _) in issues:
+        issue_html_doc = None
+        with open(get_issue_file_path(issue_id), "rb") as f:
+            issue_html_doc = f.read()
+
+        try:
+            entries = parse_entries(issue_html_doc)
+            successes.append(issue_id)
+        except Exception:
+            failures.append(issue_id)
+
+    print(f"Able to parse {len(successes)}/{len(issues)} successfully")
+    failures.sort()
+    print(f"Failures: {failures}")
 
 
 if __name__ == "__main__":
