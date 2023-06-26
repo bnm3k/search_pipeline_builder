@@ -10,7 +10,7 @@ Entry = namedtuple(
 )
 
 
-def parse_entries(html_doc):
+def parse_entries_A(html_doc):
     soup = BeautifulSoup(html_doc, "html.parser")
     content_elem = soup.find("div", id="content")
     if content_elem is None:
@@ -95,22 +95,23 @@ def main():
         data_dir_path, "issues", f"issue_{issue_id}.html"
     )
 
-    successes = []
     failures = []
-    for (issue_id, _, _) in issues:
+    for issue in issues:
+        issue_id = issue[0]
         issue_html_doc = None
         with open(get_issue_file_path(issue_id), "rb") as f:
             issue_html_doc = f.read()
 
         try:
-            entries = parse_entries(issue_html_doc)
-            successes.append(issue_id)
+            entries = parse_entries_A(issue_html_doc)
         except Exception:
-            failures.append(issue_id)
+            failures.append(issue)
 
-    print(f"Able to parse {len(successes)}/{len(issues)} successfully")
-    failures.sort()
-    print(f"Failures: {failures}")
+    # print(f"Able to parse {len(successes)}/{len(issues)} successfully")
+    failures.sort(key=lambda t: t[1], reverse=True)
+    with open("failures.csv", "w") as f:
+        for (issue_id, date, _) in failures:
+            f.write(f"{issue_id}, {date} \n")
 
 
 if __name__ == "__main__":
