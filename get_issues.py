@@ -2,11 +2,11 @@ import calendar
 import datetime
 import urllib.parse
 import re
-import timeit
 from pathlib import Path
 import os
 
 import requests
+from tqdm import tqdm
 from bs4 import BeautifulSoup
 
 
@@ -72,7 +72,7 @@ def main():
     # make sure each issue is downloaded
     downloaded = []
     already_present = []
-    for (issue_id, publish_date, relative_issue_url) in issues:
+    for (issue_id, publish_date, relative_issue_url) in tqdm(issues):
         issue_file_name = f"issue_{issue_id}.html"
         issue_file_path = os.path.join(issues_dir_path, issue_file_name)
         if os.path.isfile(issue_file_path):
