@@ -16,6 +16,7 @@ def remove_query_params(url):
     return urlparse(url)._replace(query=None).geturl()
 
 
+# newest
 def strategy_1(soup):
     content_elem = soup.find("div", id="content")
     if content_elem is None:
@@ -123,10 +124,47 @@ def strategy_2(soup):
     return entries
 
 
+def strategy_3(soup):
+    entries = []
+
+    def is_main_link(elem):
+        if elem.name != "a":
+            return False
+        if elem.get("title") is None:
+            return False
+        return True
+
+    entries_elems = soup.find_all(is_main_link)
+    for a_elem in entries_elems:
+        main_link = remove_query_params(a_elem.get("href"))
+        title = a_elem.get_text()
+        tr_content_elem = a_elem.parent.parent.find_next_sibling("tr")
+        content = tr_content_elem.get_text()
+        other_links = [
+            remove_query_params(e.get("href"))
+            for e in tr_content_elem.find_all("a")
+        ]
+        author_elem = tr_content_elem.find_next_sibling("tr")
+        author = None
+        if author_elem is not None:
+            author = author_elem.get_text()
+        tag = None
+        entry = Entry(
+            title=title,
+            author=author,
+            content=content,
+            main_link=main_link,
+            other_links=other_links,
+            tag=tag,
+        )
+        entries.append(entry)
+    return entries
+
+
 def parse_entries(html_doc):
     soup = BeautifulSoup(html_doc, "html.parser")
     last_exception = None
-    for strategy in [strategy_2]:
+    for strategy in [strategy_1, strategy_2, strategy_3]:
         try:
             entries = strategy(soup)
             return entries
