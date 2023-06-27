@@ -139,16 +139,19 @@ def strategy_3(soup):
         main_link = remove_query_params(a_elem.get("href"))
         title = a_elem.get_text()
         tr_content_elem = a_elem.parent.parent.find_next_sibling("tr")
-        content = tr_content_elem.get_text()
-        other_links = [
-            remove_query_params(e.get("href"))
-            for e in tr_content_elem.find_all("a")
-        ]
-        author_elem = tr_content_elem.find_next_sibling("tr")
+        content = None
+        other_links = []
         author = None
-        if author_elem is not None:
-            author = author_elem.get_text()
         tag = None
+        if tr_content_elem is not None:
+            content = tr_content_elem.get_text()
+            other_links = [
+                remove_query_params(e.get("href"))
+                for e in tr_content_elem.find_all("a")
+            ]
+            author_elem = tr_content_elem.find_next_sibling("tr")
+            if author_elem is not None:
+                author = author_elem.get_text()
         entry = Entry(
             title=title,
             author=author,
@@ -161,7 +164,7 @@ def strategy_3(soup):
     return entries
 
 
-def parse_entries(html_doc):
+def parse_issue(html_doc):
     soup = BeautifulSoup(html_doc, "html.parser")
     last_exception = None
     for strategy in [strategy_1, strategy_2, strategy_3]:
@@ -174,34 +177,15 @@ def parse_entries(html_doc):
 
 
 def main():
-    failures_csv = "failures.csv"
-    new_failures_csv = "new_failures.csv"
-    failure_lines = []
-    with open(failures_csv, "r") as f:
-        failure_lines = list(f.readlines())
-
-    get_issue_file_path = lambda issue_id: os.path.join(
-        "data/", "issues", f"issue_{issue_id}.html"
-    )
-
-    successes = []
-    failures = []
-    nf = open(new_failures_csv, "w")
-    for line in failure_lines:
-        issue_id = int(line.split(",")[0].strip())
-        issue_html_doc = None
-        with open(get_issue_file_path(issue_id), "rb") as f:
-            issue_html_doc = f.read()
-        try:
-            entries = parse_entries(issue_html_doc)
-            successes.append(issue_id)
-        except Exception as e:
-            failures.append(issue_id)
-            nf.write(line)
-    nf.close()
-
-    print(f"failures: {len(failures)}")
-    print(f"successes: {len(successes)}")
+    # config
+    base_url = "https://postgresweekly.com/issues"
+    list_html_doc = get_issues_list(os.path.join("data/", "list.html"))
+    issues = parse_issues_list(list_html_doc, base_url)
+    for (issue_id, publish_date, relative_issue_url) in issues:
+        issue_file_path = os.path.join("data/issues", f"issue_{issue_id}.html")
+        with open(issue_file_path, "rb") as f:
+            html_doc = f.read()
+            entries = parse_issue(html_doc)
 
 
 if __name__ == "__main__":
