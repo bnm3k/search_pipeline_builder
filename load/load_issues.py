@@ -198,6 +198,18 @@ def parse_issue(html_doc):
     raise last_exception
 
 
+def assert_schema_entry(e):
+    assert e.title is not None and isinstance(e.title, str)
+    if e.author is not None:
+        assert isinstance(e.author, str)
+    if e.content is not None:
+        assert isinstance(e.content, str)
+    if e.main_link is not None:
+        assert isinstance(e.main_link, str)
+    if e.tag is not None:
+        assert isinstance(e.tag, str)
+
+
 def main():
     base_url = "https://postgresweekly.com"
     data_dir = "raw_data"
@@ -215,17 +227,18 @@ def main():
         issue_file_path = os.path.join(
             data_dir, "issues", f"issue_{issue_id}.html"
         )
+        entries = None
         with open(issue_file_path, "rb") as f, nostdout():
             html_doc = f.read()
             try:
                 entries = parse_issue(html_doc)
-                for entry in entries:
-                    if entry.tag is not None:
-                        print(entry.tag)
             except Exception as e:
                 tqdm.write(
                     f"unable to parse issue: {issue_id}",
                 )
+        assert entries is not None
+        for entry in entries:
+            assert_schema_entry(entry)
 
 
 if __name__ == "__main__":
