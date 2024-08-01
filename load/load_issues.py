@@ -1,11 +1,32 @@
 import os
+import sys
 import re
+import contextlib
 from collections import namedtuple
 from urllib.parse import urlparse
 
+from tqdm import tqdm
 from bs4 import BeautifulSoup
+from load_catalog import load_catalog
 
-from get_issues import get_issues_list, parse_issues_list
+
+@contextlib.contextmanager
+def nostdout():
+    class DummyFile(object):
+        file = None
+
+        def __init__(self, file):
+            self.file = file
+
+        def write(self, x):
+            if len(x.rstrip()) > 0:
+                tqdm.write(x, file=self.file)
+
+    save_stdout = sys.stdout
+    sys.stdout = DummyFile(sys.stdout)
+    yield
+    sys.stdout = save_stdout
+
 
 Entry = namedtuple(
     "Entry", ["title", "author", "content", "main_link", "other_links", "tag"]
@@ -167,25 +188,44 @@ def strategy_3(soup):
 def parse_issue(html_doc):
     soup = BeautifulSoup(html_doc, "html.parser")
     last_exception = None
-    for strategy in [strategy_1, strategy_2, strategy_3]:
+    for i, strategy in enumerate([strategy_1, strategy_2, strategy_3]):
         try:
             entries = strategy(soup)
             return entries
         except Exception as e:
             last_exception = e
+    assert last_exception is not None
     raise last_exception
 
 
 def main():
-    # config
-    base_url = "https://postgresweekly.com/issues"
-    list_html_doc = get_issues_list(os.path.join("data/", "list.html"))
-    issues = parse_issues_list(list_html_doc, base_url)
-    for (issue_id, publish_date, relative_issue_url) in issues:
-        issue_file_path = os.path.join("data/issues", f"issue_{issue_id}.html")
-        with open(issue_file_path, "rb") as f:
+    base_url = "https://postgresweekly.com"
+    data_dir = "raw_data"
+    # check data dir path
+    data_dir_path = os.path.abspath(data_dir)
+    if not os.path.isdir(data_dir_path):
+        raise Exception(f"Invalid data dir path: '{data_dir_path}'")
+    print(f"Data dir set to: '{data_dir_path}'")
+
+    catalog = load_catalog(data_dir, use_cached=False)
+
+    for issue_id, publish_date, relative_issue_url in tqdm(
+        catalog, file=sys.stdout
+    ):
+        issue_file_path = os.path.join(
+            data_dir, "issues", f"issue_{issue_id}.html"
+        )
+        with open(issue_file_path, "rb") as f, nostdout():
             html_doc = f.read()
-            entries = parse_issue(html_doc)
+            try:
+                entries = parse_issue(html_doc)
+                for entry in entries:
+                    if entry.tag is not None:
+                        print(entry.tag)
+            except Exception as e:
+                tqdm.write(
+                    f"unable to parse issue: {issue_id}",
+                )
 
 
 if __name__ == "__main__":
