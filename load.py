@@ -300,8 +300,9 @@ def assert_schema_entry(e):
 
 
 def main():
-    data_dir_default = "raw_data"
-    db_path_default = "pg_weekly.db"
+    project_root = os.path.dirname(__file__)
+    data_dir_default = os.path.join(project_root, "raw_data")
+    db_path_default = os.path.join("pg_weekly.db")
 
     parser = argparse.ArgumentParser(
         prog="load_entries",
