@@ -307,7 +307,7 @@ def assert_schema_entry(e):
 
 def cli():
     project_root = os.path.dirname(__file__)
-    data_dir_default = os.path.join(project_root, "raw_data")
+    data_dir_default = os.path.join(project_root, "data")
     db_path_default = os.path.join("pg_weekly.db")
 
     parser = argparse.ArgumentParser(
