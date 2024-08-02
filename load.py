@@ -3,6 +3,7 @@ import os
 import sys
 import re
 import datetime
+import calendar
 import contextlib
 from collections import namedtuple
 from urllib.parse import urlparse, urljoin
@@ -10,6 +11,9 @@ from urllib.parse import urlparse, urljoin
 import requests
 from tqdm import tqdm
 from bs4 import BeautifulSoup
+import duckdb
+
+from init_db import init_db
 
 
 @contextlib.contextmanager
@@ -299,7 +303,7 @@ def assert_schema_entry(e):
         assert isinstance(e.tag, str)
 
 
-def main():
+def cli():
     project_root = os.path.dirname(__file__)
     data_dir_default = os.path.join(project_root, "raw_data")
     db_path_default = os.path.join("pg_weekly.db")
@@ -317,10 +321,17 @@ def main():
         default=data_dir_default,
     )
     args = parser.parse_args()
+    return args
 
+
+def main():
+    args = cli()
     base_url = "https://postgresweekly.com"
     # check db path
     db_path = os.path.abspath(args.db)
+    if not os.path.exists(db_path):
+        print("DB does not exist, creating and initializing db")
+        init_db(db_path)
     if not os.path.isfile(db_path):
         raise Exception(f"Invalid db path: '{db_path}'")
     print(f"DB path: '{db_path}'")
@@ -331,26 +342,37 @@ def main():
         raise Exception(f"Invalid data dir path: '{data_dir_path}'")
     print(f"Data dir: '{data_dir_path}'")
 
-    catalog = load_catalog(data_dir_path, use_cached=False)
+    catalog = load_catalog(data_dir_path, use_cached=True)
 
-    for issue_id, publish_date, relative_issue_url in tqdm(
-        catalog, file=sys.stdout
-    ):
-        issue_file_path = os.path.join(
-            data_dir_path, "issues", f"issue_{issue_id}.html"
-        )
-        entries = None
-        with open(issue_file_path, "rb") as f, nostdout():
-            html_doc = f.read()
-            try:
-                entries = parse_issue(html_doc)
-            except Exception as e:
-                tqdm.write(
-                    f"unable to parse issue: {issue_id}",
-                )
-        assert entries is not None
-        for entry in entries:
-            assert_schema_entry(entry)
+    with duckdb.connect(db_path) as conn:
+        print("Drop FTS index")
+        try:
+            conn.sql("PRAGMA drop_fts_index(entries)")
+        except duckdb.CatalogException:
+            pass
+
+        for issue_id, publish_date, relative_issue_url in tqdm(
+            catalog, file=sys.stdout
+        ):
+            # insert issue metadata
+            issue_file_path = os.path.join(
+                data_dir_path, "issues", f"issue_{issue_id}.html"
+            )
+            entries = None
+            with open(issue_file_path, "rb") as f, nostdout():
+                html_doc = f.read()
+                try:
+                    entries = parse_issue(html_doc)
+                except Exception as e:
+                    tqdm.write(
+                        f"unable to parse issue: {issue_id}",
+                    )
+            assert entries is not None
+            # insert entries
+            for entry in entries:
+                assert_schema_entry(entry)
+
+        # recreate FTS index
 
 
 if __name__ == "__main__":
