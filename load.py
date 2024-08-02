@@ -429,9 +429,21 @@ def main():
             )
             conn.sql(f"insert into entries by name (select * from entries_tbl)")
             conn.execute("commit")
+        print("Insert entries")
 
         # recreate FTS index
+        conn.sql(
+            """
+        PRAGMA create_fts_index(
+            entries, -- input table
+            id,  -- input id (document identifier)
+            title, author, content, tag -- input values to index
+        )
+                 """
+        )
         print("Create FTS index")
+
+    print("Done")
 
 
 if __name__ == "__main__":
