@@ -1,4 +1,5 @@
 import argparse
+from time import sleep
 import os
 import sys
 import re
@@ -12,6 +13,7 @@ import requests
 from tqdm import tqdm
 from bs4 import BeautifulSoup
 import duckdb
+import pyarrow as pa
 
 from init_db import init_db
 
@@ -324,6 +326,25 @@ def cli():
     return args
 
 
+def entries_to_pyarrow_tbl(issue_id, entries):
+    return pa.table(
+        {
+            "issue_id": pa.array((issue_id for _ in entries), type=pa.int64()),
+            "title": pa.array((e.title for e in entries), type=pa.string()),
+            "author": pa.array((e.author for e in entries), type=pa.string()),
+            "content": pa.array((e.content for e in entries), type=pa.string()),
+            "main_link": pa.array(
+                (e.main_link for e in entries), type=pa.string()
+            ),
+            "other_links": pa.array(
+                (e.other_links for e in entries),
+                type=pa.list_(pa.string()),
+            ),
+            "tag": pa.array((e.tag for e in entries), type=pa.string()),
+        }
+    )
+
+
 def main():
     args = cli()
     base_url = "https://postgresweekly.com"
@@ -351,9 +372,40 @@ def main():
         except duckdb.CatalogException:
             pass
 
-        for issue_id, publish_date, relative_issue_url in tqdm(
-            catalog, file=sys.stdout
-        ):
+        # insert issue metadata (catalog)
+        catalog_tbl = pa.table(
+            {
+                "id": pa.array([x[0] for x in catalog], type=pa.int64()),
+                "publish_date": pa.array(
+                    [x[1] for x in catalog], type=pa.date32()
+                ),
+                "url": pa.array([x[2] for x in catalog], type=pa.string()),
+            },
+        )
+        # first retrieve the fresh issues
+        new_issues = set(
+            v.as_py()
+            for v in conn.sql(
+                """select id from catalog_tbl
+        where id not in (select id from issues)
+        """
+            ).arrow()["id"]
+        )
+
+        conn.sql(
+            """insert or ignore into issues(id, publish_date, url)
+        select id, publish_date, url from catalog_tbl
+        """
+        )
+        print("Insert issue metadata from catalog")
+
+        for issue_id, _, _ in tqdm(catalog, file=sys.stdout):
+            if issue_id not in new_issues:
+                # skip issues we've already ingested
+                continue
+            else:
+                tqdm.write(f"Insert {issue_id}, is new")
+
             # insert issue metadata
             issue_file_path = os.path.join(
                 data_dir_path, "issues", f"issue_{issue_id}.html"
@@ -368,11 +420,18 @@ def main():
                         f"unable to parse issue: {issue_id}",
                     )
             assert entries is not None
-            # insert entries
-            for entry in entries:
-                assert_schema_entry(entry)
+            entries_tbl = entries_to_pyarrow_tbl(issue_id, entries)
+
+            conn.execute("begin")
+            conn.execute(
+                "update issues set num_entries = $2 where id = $1",
+                [issue_id, len(entries)],
+            )
+            conn.sql(f"insert into entries by name (select * from entries_tbl)")
+            conn.execute("commit")
 
         # recreate FTS index
+        print("Create FTS index")
 
 
 if __name__ == "__main__":
