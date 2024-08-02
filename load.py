@@ -1,3 +1,4 @@
+import argparse
 import os
 import sys
 import re
@@ -299,21 +300,43 @@ def assert_schema_entry(e):
 
 
 def main():
+    data_dir_default = "raw_data"
+    db_path_default = "pg_weekly.db"
+
+    parser = argparse.ArgumentParser(
+        prog="load_entries",
+        description="retrieves weekly issues from PG Weekly, parses them, loads into a duckdb database then sets up full text search",
+    )
+    parser.add_argument(
+        "--db", help="path to the db file", default=db_path_default
+    )
+    parser.add_argument(
+        "--data_dir",
+        help="path to dir where raw html from pg weekly is stored",
+        default=data_dir_default,
+    )
+    args = parser.parse_args()
+
     base_url = "https://postgresweekly.com"
-    data_dir = "raw_data"
+    # check db path
+    db_path = os.path.abspath(args.db)
+    if not os.path.isfile(db_path):
+        raise Exception(f"Invalid db path: '{db_path}'")
+    print(f"DB path: '{db_path}'")
+
     # check data dir path
-    data_dir_path = os.path.abspath(data_dir)
+    data_dir_path = os.path.abspath(args.data_dir)
     if not os.path.isdir(data_dir_path):
         raise Exception(f"Invalid data dir path: '{data_dir_path}'")
-    print(f"Data dir set to: '{data_dir_path}'")
+    print(f"Data dir: '{data_dir_path}'")
 
-    catalog = load_catalog(data_dir, use_cached=False)
+    catalog = load_catalog(data_dir_path, use_cached=False)
 
     for issue_id, publish_date, relative_issue_url in tqdm(
         catalog, file=sys.stdout
     ):
         issue_file_path = os.path.join(
-            data_dir, "issues", f"issue_{issue_id}.html"
+            data_dir_path, "issues", f"issue_{issue_id}.html"
         )
         entries = None
         with open(issue_file_path, "rb") as f, nostdout():
