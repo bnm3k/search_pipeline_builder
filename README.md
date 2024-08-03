@@ -83,34 +83,40 @@ configured to elsewhere via the `--db` CLI option).
 
 To search through the content, use the `search.py` script:
 
-```python
+```bash
 python search.py [search_terms ...]
 ```
 
 For example, to search for entries that include the terms "schema design":
 
-```python
+```bash
 python search.py "schema design"
 ```
 
-This prints out:
+This launches the browser which displays:
+
+![search results rendered using great tables](assets/sample_results.png)
+
+If you want to output to terminal instead, pass the `--cli` flag:
+
+```bash
+python search.py --cli "paxos"
+```
+
+This outputs
 
 ```
-┌───────────────────────────────────────┬──────────────────────────────────────────┐
-│ Title                                 │ Content                                  │
-├───────────────────────────────────────┼──────────────────────────────────────────┤
-│ A Tour of a Postgres Schema Design Pr │ This is aimed at users of PostGraphil... │
-├───────────────────────────────────────┼──────────────────────────────────────────┤
-│ Some Notes on GitLab’s Postgres Schem │ It’s been a worrying long time since ... │
-├───────────────────────────────────────┼──────────────────────────────────────────┤
-│ Automate Your Postgres & TimescaleDB  │ Built by the team at Timescale, PGSch... │
-├───────────────────────────────────────┼──────────────────────────────────────────┤
-│ ▶  Advanced Postgres Schema Design    │ A talk from PGConf NYC 2021 on going ... │
-├───────────────────────────────────────┼──────────────────────────────────────────┤
-│ Instacart on Dropping Postgres for Am │ Odd vibe to this post, but an interes... │
-├───────────────────────────────────────┼──────────────────────────────────────────┤
-│ Optimize PostgreSQL: Essential Tuning │ Discover proven PostgreSQL performanc... │
-└───────────────────────────────────────┴──────────────────────────────────────────┘
+shape: (2, 4)
+┌─────────────────────────┬────────────┬────────────┬────────────────────────────────┐
+│ title                   ┆ author     ┆ date       ┆ content                        │
+│ ---                     ┆ ---        ┆ ---        ┆ ---                            │
+│ str                     ┆ str        ┆ str        ┆ str                            │
+╞═════════════════════════╪════════════╪════════════╪════════════════════════════════╡
+│ pg_paxos: High          ┆ Citus Data ┆ 2015-11-25 ┆                                │
+│ Availability Da…        ┆            ┆            ┆ The pg_paxos extension demons… │
+│ Master-less Distributed ┆ Citus Data ┆ 2016-04-27 ┆ Pg_paxos is a database-level   │
+│ Queue …                 ┆            ┆            ┆ i…                             │
+└─────────────────────────┴────────────┴────────────┴────────────────────────────────┘
 ```
 
 If elsewhere, or you are running this script from a different directory, you can
