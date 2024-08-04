@@ -1,5 +1,7 @@
 begin;
 
+install vss;
+
 create table issues(
     id integer primary key,
     publish_date date not null,

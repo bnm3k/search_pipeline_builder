@@ -122,6 +122,15 @@ shape: (2, 4)
 If elsewhere, or you are running this script from a different directory, you can
 specify the DB path via the `--db` CLI option.
 
+## Vector Similarity Search
+
+To create embeddings and set up the index for vector search, use the
+`gen_embeddings.py` script:
+
+```bash
+python gen_embeddings.py
+```
+
 ## Contributing
 
 Contributions are welcome! Please fork the repository and create a pull request
