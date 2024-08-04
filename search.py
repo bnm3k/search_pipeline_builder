@@ -3,10 +3,12 @@ import argparse
 
 import duckdb
 import polars as pl
+from fastembed import TextEmbedding
+
 from great_tables import GT
 
 
-def cli():
+def cli(search_strategies):
     project_root = os.path.dirname(__file__)
     db_path_default = os.path.join(project_root, "pg_weekly.db")
 
@@ -17,6 +19,15 @@ def cli():
 
     parser.add_argument(
         "--db", help="path to db file", default=db_path_default, dest="db_path"
+    )
+
+    parser.add_argument(
+        "--strategy",
+        "-s",
+        help="search strategy to use",
+        choices=search_strategies,
+        default=search_strategies[0],
+        dest="search_strategy",
     )
 
     parser.add_argument(
@@ -39,62 +50,7 @@ def cli():
     return args
 
 
-def search(db_path, search_term):
-    search_results_df = None
-
-    with duckdb.connect(db_path, read_only=True) as conn:
-        search_results_df = conn.execute(
-            f"""
-        select
-            case
-                when tag is not null
-                    then coalesce(e.title,'') || ' (' || e.tag || ')'
-                else coalesce(e.title,'')
-            end as title,
-            e.author,
-            coalesce(e.content,'') as content,
-            e.main_link,
-            i.publish_date::varchar as date
-        from (
-            select *,
-            fts_main_entries.match_bm25(id, $1) as score
-            from entries
-        ) as e
-        join issues i on e.issue_id = i.id
-        where score is not null
-        order by score desc
-                             """,
-            [search_term],
-        ).pl()
-    assert search_results_df is not None
-    return search_results_df
-
-
-def main():
-    args = cli()
-    search_term = " ".join(args.search_terms)
-    output_to_cli = args.output_to_cli
-
-    # check db path
-    db_path = os.path.abspath(args.db_path)
-    if not os.path.isfile(db_path):
-        raise Exception(f"Invalid db path: '{db_path}'")
-
-    search_results_df = search(db_path, search_term)
-    num_results = search_results_df.select(pl.len())["len"][0]
-    if num_results == 0:
-        print(f"No results for '{search_term}'")
-        return
-
-    if output_to_cli:
-        print(search_results_df[["title", "author", "date", "content"]])
-        return
-
-    # else, output to webpage using Great tables
-
-    num_results = search_results_df.select(pl.len())["len"][0]
-
-    df = search_results_df
+def output_to_great_tables(df, search_term, num_results):
     linkify = lambda s, l: pl.concat_str(
         [
             pl.lit("["),
@@ -120,6 +76,93 @@ def main():
     )
 
     gt_tbl.show()
+
+
+def search_duckdb_fts(conn, search_term, max_count=None):
+    sql = f"""
+    select
+        title,
+        e.author,
+        coalesce(e.content,'') as content,
+        e.main_link,
+        i.publish_date::varchar as date
+    from (
+        select *,
+        fts_main_entries.match_bm25(id, $1) as score
+        from entries
+    ) as e
+    join issues i on e.issue_id = i.id
+    where score is not null
+    order by score desc
+    """
+    if max_count is not None:
+        sql += f"\n limit {max_count}"
+    results_df = conn.execute(sql, [search_term]).pl()
+    return results_df
+
+
+def search_duckdb_vector_similarity(conn, search_term, max_count=20):
+    # get model
+    name = "BAAI/bge-small-en-v1.5"
+    model = TextEmbedding(model_name=name)
+    model_description = model._get_model_description(name)
+    dimension = model_description["dim"]
+
+    # embed query
+    query_embedding = list(model.query_embed(search_term))[0]
+
+    sql = f"""
+    select
+        title,
+        e.author,
+        coalesce(e.content,'') as content,
+        e.main_link,
+        i.publish_date::varchar as date
+    from entries e
+    join embeddings em on e.id = em.entry_id
+    join issues i on e.issue_id = i.id
+    order  by array_cosine_similarity(vec, $1::FLOAT[{dimension}]) desc
+    limit {max_count}
+    """
+    results_df = conn.execute(sql, [query_embedding]).pl()
+    return results_df
+
+
+def main():
+    search_strategies = ["lexical", "semantic"]
+    args = cli(search_strategies)
+    search_term = " ".join(args.search_terms)
+    output_to_cli = args.output_to_cli
+
+    # check db path
+    db_path = os.path.abspath(args.db_path)
+    if not os.path.isfile(db_path):
+        raise Exception(f"Invalid db path: '{db_path}'")
+
+    with duckdb.connect(db_path, read_only=True) as conn:
+        strategy = args.search_strategy
+        if strategy == "lexical":
+            results_df = search_duckdb_fts(conn, search_term)
+        elif strategy == "semantic":
+            results_df = search_duckdb_vector_similarity(conn, search_term)
+        else:
+            raise NotImplementedError(
+                f"Search strategy: {args.search_strategy}"
+            )
+
+    num_results = results_df.select(pl.len())["len"][0]
+    if num_results == 0:
+        print(f"No results for '{search_term}'")
+        return
+
+    if output_to_cli:
+        print(results_df[["title", "author", "date", "content"]])
+        return
+
+    # else, output to webpage using Great tables
+    num_results = results_df.select(pl.len())["len"][0]
+    df = results_df
+    output_to_great_tables(results_df, search_term, num_results)
 
 
 if __name__ == "__main__":
