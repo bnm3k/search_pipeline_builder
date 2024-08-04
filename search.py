@@ -183,8 +183,14 @@ def search_duckdb_hybrid(conn, search_term, max_count=20):
 
 
 def main():
-    search_strategies = ["lexical", "semantic", "hybrid"]
-    args = cli(search_strategies)
+    search_strategies = {
+        "lexical": search_duckdb_fts,
+        "semantic": search_duckdb_vector_similarity,
+        "hybrid": search_duckdb_hybrid,
+    }
+
+    args = cli(list(search_strategies.keys()))
+
     search_term = " ".join(args.search_terms)
     output_to_cli = args.output_to_cli
 
@@ -195,16 +201,12 @@ def main():
 
     with duckdb.connect(db_path, read_only=True) as conn:
         strategy = args.search_strategy
-        if strategy == "lexical":
-            results_df = search_duckdb_fts(conn, search_term)
-        elif strategy == "semantic":
-            results_df = search_duckdb_vector_similarity(conn, search_term)
-        elif strategy == "hybrid":
-            results_df = search_duckdb_hybrid(conn, search_term)
-        else:
+        fn = search_strategies.get(strategy)
+        if fn is None:
             raise NotImplementedError(
                 f"Search strategy: {args.search_strategy}"
             )
+        results_df = search_duckdb_fts(conn, search_term)
 
     num_results = results_df.select(pl.len())["len"][0]
     if num_results == 0:
