@@ -128,8 +128,62 @@ def search_duckdb_vector_similarity(conn, search_term, max_count=20):
     return results_df
 
 
+def search_duckdb_hybrid(conn, search_term, max_count=20):
+    # get model
+    name = "BAAI/bge-small-en-v1.5"
+    model = TextEmbedding(model_name=name)
+    model_description = model._get_model_description(name)
+    dimension = model_description["dim"]
+
+    # embed query
+    query_embedding = list(model.query_embed(search_term))[0]
+
+    # rrf parameter
+    k = 60
+
+    sql = f"""
+    with lexical_search as (
+        select
+            id as entry_id,
+            rank() over (
+                order by fts_main_entries.match_bm25(id, $1) desc nulls last
+            ) as rank
+        from  entries
+    ),
+    semantic_search as (
+        select
+            entry_id,
+            rank() over(
+                order by array_cosine_similarity(vec, $2::FLOAT[{dimension}]) desc
+            ) as rank
+        from embeddings
+    ),
+    rrf as (
+        select
+            coalesce(l.entry_id, s.entry_id) as entry_id,
+            coalesce(1.0 / ($3 + s.rank), 0.0) +
+            coalesce(1.0 / ($3 + l.rank), 0.0) as score
+        from lexical_search l
+        full outer join  semantic_search s using(entry_id)
+        order by score desc
+        limit {max_count}
+    )
+    select
+        title,
+        e.author,
+        coalesce(e.content,'') as content,
+        e.main_link,
+        i.publish_date::varchar as date
+    from entries e
+    join rrf on e.id = rrf.entry_id
+    join issues i on e.issue_id = i.id
+    """
+    results_df = conn.execute(sql, [search_term, query_embedding, k]).pl()
+    return results_df
+
+
 def main():
-    search_strategies = ["lexical", "semantic"]
+    search_strategies = ["lexical", "semantic", "hybrid"]
     args = cli(search_strategies)
     search_term = " ".join(args.search_terms)
     output_to_cli = args.output_to_cli
@@ -145,6 +199,8 @@ def main():
             results_df = search_duckdb_fts(conn, search_term)
         elif strategy == "semantic":
             results_df = search_duckdb_vector_similarity(conn, search_term)
+        elif strategy == "hybrid":
+            results_df = search_duckdb_hybrid(conn, search_term)
         else:
             raise NotImplementedError(
                 f"Search strategy: {args.search_strategy}"
