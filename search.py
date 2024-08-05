@@ -188,8 +188,8 @@ def main():
         "semantic": search_duckdb_vector_similarity,
         "hybrid": search_duckdb_hybrid,
     }
-
-    args = cli(list(search_strategies.keys()))
+    keys = list(search_strategies.keys())
+    args = cli(keys)
 
     search_term = " ".join(args.search_terms)
     output_to_cli = args.output_to_cli
@@ -200,13 +200,11 @@ def main():
         raise Exception(f"Invalid db path: '{db_path}'")
 
     with duckdb.connect(db_path, read_only=True) as conn:
-        strategy = args.search_strategy
-        fn = search_strategies.get(strategy)
+        search_strategy = args.search_strategy
+        fn = search_strategies.get(search_strategy)
         if fn is None:
-            raise NotImplementedError(
-                f"Search strategy: {args.search_strategy}"
-            )
-        results_df = search_duckdb_fts(conn, search_term)
+            raise NotImplementedError(f"Search strategy: {search_strategy}")
+        results_df = fn(conn, search_term)
 
     num_results = results_df.select(pl.len())["len"][0]
     if num_results == 0:
