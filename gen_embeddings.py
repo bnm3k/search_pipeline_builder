@@ -1,10 +1,12 @@
 import os
 import argparse
+import pickle
 
 import duckdb
 import duckdb.typing as t
 import pyarrow as pa
 import polars as pl
+import hnswlib
 
 from fastembed import TextEmbedding
 import numpy as np
@@ -12,7 +14,8 @@ import numpy as np
 
 def cli():
     project_root = os.path.dirname(__file__)
-    db_path_default = os.path.join(project_root, "pg_weekly.db")
+    default_db_path = os.path.join(project_root, "pg_weekly.db")
+    default_index_path = os.path.join(project_root, "index.bin")
 
     parser = argparse.ArgumentParser(
         prog="gen_embeddings",
@@ -20,7 +23,15 @@ def cli():
     )
 
     parser.add_argument(
-        "--db", help="path to db file", default=db_path_default, dest="db_path"
+        "--db", help="path to db file", default=default_db_path, dest="db_path"
+    )
+
+    parser.add_argument(
+        "--index",
+        "-i",
+        help="path to index file",
+        default=default_index_path,
+        dest="index_file_path",
     )
 
     args = parser.parse_args()
@@ -85,8 +96,9 @@ def main():
         )
         print("Generate embeddings")
 
+        # create index to speed up search
+
         # create vector similarity index
-        # NOTE: currently indexing doesn't work as expected
         # conn.load_extension("vss")
         # conn.execute("set hnsw_enable_experimental_persistence = true")
 
@@ -98,6 +110,30 @@ def main():
         # """
         # )
         # print("Create vector similarity index on embeddings")
+
+        num_elements = conn.sql(
+            "select count(*) as count from embeddings"
+        ).fetchone()[0]
+
+        data_tbl = conn.sql(
+            "select entry_id as id, vec as vec from embeddings"
+        ).fetchnumpy()
+
+        index = hnswlib.Index(space="cosine", dim=dimension)
+        index.init_index(max_elements=num_elements, ef_construction=200, M=48)
+
+        ids = data_tbl["id"]
+        ems = data_tbl["vec"].tolist()
+
+        index.add_items(ems, ids)
+
+        index.set_ef(50)  # ef should always be greater than k
+
+        # overwrite index file
+        index.save_index(args.index_file_path)
+
+        print(f"Create Index at {args.index_file_path}")
+
         conn.execute("commit")
 
 
