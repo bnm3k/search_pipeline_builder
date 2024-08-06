@@ -86,19 +86,19 @@ def main():
         print("Generate embeddings")
 
         # create vector similarity index
-        conn.load_extension("vss")
-        conn.execute("set hnsw_enable_experimental_persistence = true")
+        # NOTE: currently indexing doesn't work as expected
+        # conn.load_extension("vss")
+        # conn.execute("set hnsw_enable_experimental_persistence = true")
 
-        conn.execute(
-            """
-            create index entries_vec_index on embeddings
-            using hnsw(vec)
-            with (metric = 'cosine');
-        """
-        )
+        # conn.execute(
+        #     """
+        #     create index entries_vec_index on embeddings
+        #     using hnsw(vec)
+        #     with (metric = 'cosine');
+        # """
+        # )
+        # print("Create vector similarity index on embeddings")
         conn.execute("commit")
-
-        print("Create vector similarity index on embeddings")
 
 
 if __name__ == "__main__":
