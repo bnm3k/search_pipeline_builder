@@ -3,6 +3,8 @@ import argparse
 import time
 
 import duckdb
+import pyarrow as pa
+import hnswlib
 import polars as pl
 from fastembed import TextEmbedding
 
@@ -11,7 +13,8 @@ from great_tables import GT
 
 def cli(search_strategies):
     project_root = os.path.dirname(__file__)
-    db_path_default = os.path.join(project_root, "pg_weekly.db")
+    default_db_path = os.path.join(project_root, "pg_weekly.db")
+    default_index_path = os.path.join(project_root, "index.bin")
 
     parser = argparse.ArgumentParser(
         prog="search",
@@ -19,7 +22,25 @@ def cli(search_strategies):
     )
 
     parser.add_argument(
-        "--db", help="path to db file", default=db_path_default, dest="db_path"
+        "--db", help="path to db file", default=default_db_path, dest="db_path"
+    )
+
+    parser.add_argument(
+        "--index",
+        "-i",
+        help="path to index file",
+        default=default_index_path,
+        dest="index_file_path",
+    )
+
+    # use the index luke!
+    parser.add_argument(
+        "--use-index",
+        help="Flag to turn on index scan (for vector-similarity based searches only)",
+        action="store_const",
+        const=True,
+        default=False,
+        dest="use_index",
     )
 
     parser.add_argument(
@@ -102,7 +123,9 @@ def search_duckdb_fts(conn, search_term, max_count=None):
     return results_df
 
 
-def search_duckdb_vector_similarity(conn, search_term, max_count=20):
+def search_duckdb_vector_similarity(
+    conn, search_term, max_count=20, use_index=False, index=None
+):
     # get model
     name = "BAAI/bge-small-en-v1.5"
     model = TextEmbedding(model_name=name)
@@ -112,24 +135,51 @@ def search_duckdb_vector_similarity(conn, search_term, max_count=20):
     # embed query
     query_embedding = list(model.query_embed(search_term))[0]
 
-    sql = f"""
-    select
-        title,
-        e.author,
-        coalesce(e.content,'') as content,
-        e.main_link,
-        i.publish_date::varchar as date
-    from entries e
-    join embeddings em on e.id = em.entry_id
-    join issues i on e.issue_id = i.id
-    order  by array_cosine_similarity(vec, $1::FLOAT[{dimension}]) desc
-    limit {max_count}
-    """
-    results_df = conn.execute(sql, [query_embedding]).pl()
+    results_df = None
+    if use_index:
+        assert index is not None
+        ids, distances = index.knn_query(query_embedding, k=max_count)
+
+        knn_tbl = pa.Table.from_arrays(
+            [pa.array(ids[0]), pa.array(distances[0])],
+            names=["entry_id", "distance"],
+        )
+        results_df = conn.sql(
+            """
+        select
+            title,
+            e.author,
+            coalesce(e.content,'') as content,
+            e.main_link,
+            i.publish_date::varchar as date
+        from entries e
+        join knn_tbl k on e.id = k.entry_id
+        join issues i on e.issue_id = i.id
+        order by distance asc
+            """
+        ).pl()
+    else:
+        sql = f"""
+        select
+            title,
+            e.author,
+            coalesce(e.content,'') as content,
+            e.main_link,
+            i.publish_date::varchar as date
+        from entries e
+        join embeddings em on e.id = em.entry_id
+        join issues i on e.issue_id = i.id
+        order  by array_cosine_similarity(vec, $1::FLOAT[{dimension}]) desc
+        limit {max_count}
+        """
+        results_df = conn.execute(sql, [query_embedding]).pl()
+    assert results_df is not None
     return results_df
 
 
-def search_duckdb_hybrid(conn, search_term, max_count=20):
+def search_duckdb_hybrid(
+    conn, search_term, max_count=20, use_index=False, index=None
+):
     # get model
     name = "BAAI/bge-small-en-v1.5"
     model = TextEmbedding(model_name=name)
@@ -142,8 +192,28 @@ def search_duckdb_hybrid(conn, search_term, max_count=20):
     # rrf parameter
     k = 60
 
+    # use index?
+    if use_index:
+        ids, distances = index.knn_query(query_embedding, k=max_count)
+        knn_tbl = pa.Table.from_arrays(
+            [pa.array(ids[0]), pa.array(range(len(ids[0])))],
+            names=["entry_id", "rank"],
+        )
+    else:
+        knn_tbl = conn.execute(
+            f"""
+        select
+            entry_id,
+            rank() over(
+                order by array_cosine_similarity(vec, $1::FLOAT[{dimension}]) desc
+            ) as rank
+        from embeddings
+        """,
+            [query_embedding],
+        ).arrow()
+
     sql = f"""
-    with lexical_search as (
+    with lexical_search_results as (
         select
             id as entry_id,
             rank() over (
@@ -151,21 +221,16 @@ def search_duckdb_hybrid(conn, search_term, max_count=20):
             ) as rank
         from  entries
     ),
-    semantic_search as (
-        select
-            entry_id,
-            rank() over(
-                order by array_cosine_similarity(vec, $2::FLOAT[{dimension}]) desc
-            ) as rank
-        from embeddings
+    semantic_search_results as (
+        select entry_id, rank from knn_tbl
     ),
     rrf as (
         select
             coalesce(l.entry_id, s.entry_id) as entry_id,
-            coalesce(1.0 / ($3 + s.rank), 0.0) +
-            coalesce(1.0 / ($3 + l.rank), 0.0) as score
-        from lexical_search l
-        full outer join  semantic_search s using(entry_id)
+            coalesce(1.0 / ($2 + s.rank), 0.0) +
+            coalesce(1.0 / ($2 + l.rank), 0.0) as score
+        from lexical_search_results l
+        full outer join  semantic_search_results s using(entry_id)
         order by score desc
         limit {max_count}
     )
@@ -179,8 +244,15 @@ def search_duckdb_hybrid(conn, search_term, max_count=20):
     join rrf on e.id = rrf.entry_id
     join issues i on e.issue_id = i.id
     """
-    results_df = conn.execute(sql, [search_term, query_embedding, k]).pl()
+    results_df = conn.execute(sql, [search_term, k]).pl()
     return results_df
+
+
+def get_index(file_path, dimension):
+    index = hnswlib.Index(space="cosine", dim=dimension)
+    index.set_ef(50)
+    index.load_index(file_path)
+    return index
 
 
 def main():
@@ -202,12 +274,24 @@ def main():
 
     with duckdb.connect(db_path, read_only=True) as conn:
         search_strategy = args.search_strategy
-        fn = search_strategies.get(search_strategy)
-        if fn is None:
-            raise NotImplementedError(f"Search strategy: {search_strategy}")
-
+        dimension = 384  # TODO: let's not hardcode this, maybe store in DB?
+        index = None
+        if args.use_index:
+            print("Use index")
+            index = get_index(args.index_file_path, dimension)
         start = time.time_ns()
-        results_df = fn(conn, search_term)
+        if search_strategy == "lexical":
+            results_df = search_duckdb_fts(conn, search_term)
+        elif search_strategy == "semantic":
+            results_df = search_duckdb_vector_similarity(
+                conn, search_term, use_index=args.use_index, index=index
+            )
+        elif search_strategy == "hybrid":
+            results_df = search_duckdb_hybrid(
+                conn, search_term, use_index=args.use_index, index=index
+            )
+        else:
+            raise NotImplementedError(f"Search strategy: {search_strategy}")
         end = time.time_ns()
         duration_ms = (end - start) / 1000000
 
