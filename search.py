@@ -1,5 +1,6 @@
 import os
 import argparse
+import time
 
 import duckdb
 import polars as pl
@@ -50,7 +51,7 @@ def cli(search_strategies):
     return args
 
 
-def output_to_great_tables(df, search_term, num_results):
+def output_to_great_tables(df, search_term, num_results, duration_ms):
     linkify = lambda s, l: pl.concat_str(
         [
             pl.lit("["),
@@ -66,7 +67,7 @@ def output_to_great_tables(df, search_term, num_results):
         GT(df[["title", "author", "date", "content"]], rowname_col="title")
         .tab_header(
             title="Postgres Weekly Search Results",
-            subtitle=f"Search for '{search_term}', retrieved {num_results} results",
+            subtitle=f"Search for '{search_term}', retrieved {num_results} results, took {duration_ms} ms",
         )
         .fmt_markdown(columns="title")
         .fmt_date(columns="date", date_style="day_m_year")
@@ -204,7 +205,11 @@ def main():
         fn = search_strategies.get(search_strategy)
         if fn is None:
             raise NotImplementedError(f"Search strategy: {search_strategy}")
+
+        start = time.time_ns()
         results_df = fn(conn, search_term)
+        end = time.time_ns()
+        duration_ms = (end - start) / 1000000
 
     num_results = results_df.select(pl.len())["len"][0]
     if num_results == 0:
@@ -212,13 +217,14 @@ def main():
         return
 
     if output_to_cli:
+        print(f"search took f{duration_ms} ms")
         print(results_df[["title", "author", "date", "content"]])
         return
 
     # else, output to webpage using Great tables
     num_results = results_df.select(pl.len())["len"][0]
     df = results_df
-    output_to_great_tables(results_df, search_term, num_results)
+    output_to_great_tables(results_df, search_term, num_results, duration_ms)
 
 
 if __name__ == "__main__":
