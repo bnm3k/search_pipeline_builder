@@ -48,7 +48,8 @@ def main():
 
     # get model
     name = "BAAI/bge-small-en-v1.5"
-    model = TextEmbedding(model_name=name, providers=["CUDAExecutionProvider"])
+    # model = TextEmbedding(model_name=name, providers=["CUDAExecutionProvider"])
+    model = TextEmbedding(model_name=name, providers=["CPUExecutionProvider"])
     model_description = model._get_model_description(name)
     dimension = model_description["dim"]
 
