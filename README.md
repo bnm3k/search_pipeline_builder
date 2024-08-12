@@ -60,7 +60,7 @@ script:
 python init_db.py
 ```
 
-By default, it creates a db with the name `pg_weekly.db` at the project root
+By default, it creates a db with the name `db/pg_weekly.db` at the project root
 based on the schema `schema.sql`. To configure the name or path where the db
 will be created, use the `--db` CLI option. If the schema is stored somewhere
 else, use `--schema` CLI option to specify its path.
@@ -72,12 +72,12 @@ python load.py
 ```
 
 This script retrieves raw html from the PG Weekly site and stores the content at
-the `data/` directory (to use a different location, pass the path via the
+the `raw_data/` directory (to use a different location, pass the path via the
 `--data_dir` CLI option). Once all the raw html has been retrieved,
 [Beautiful Soup](https://pypi.org/project/beautifulsoup4/) is used to parse the
 HTML and extract structured content. After parsing, the data is inserted into
-the DuckDB database (defaults to `pg_weekly.db` at the project root but can be
-configured to elsewhere via the `--db` CLI option).
+the DuckDB database (defaults to `db/pg_weekly.db` at the project root but can
+be configured to elsewhere via the `--db` CLI option).
 
 ### Usage: Searching through the Content
 

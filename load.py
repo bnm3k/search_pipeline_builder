@@ -15,6 +15,7 @@ import duckdb
 import pyarrow as pa
 
 from init_db import init_db
+from lib import defaults
 
 
 @contextlib.contextmanager
@@ -305,21 +306,19 @@ def assert_schema_entry(e):
 
 
 def cli():
-    project_root = os.path.dirname(__file__)
-    data_dir_default = os.path.join(project_root, "data")
-    db_path_default = os.path.join("pg_weekly.db")
-
     parser = argparse.ArgumentParser(
         prog="load_entries",
         description="retrieves weekly issues from PG Weekly, parses them, loads into a duckdb database then sets up full text search",
     )
     parser.add_argument(
-        "--db", help="path to the db file", default=db_path_default
+        "--db",
+        help="path to the db file",
+        default=defaults.db_path,
     )
     parser.add_argument(
         "--data_dir",
         help="path to dir where raw html from pg weekly is stored",
-        default=data_dir_default,
+        default=defaults.raw_data_dir,
     )
     args = parser.parse_args()
     return args

@@ -9,27 +9,24 @@ import polars as pl
 from fastembed import TextEmbedding
 
 from great_tables import GT
+from lib import defaults
 
 
 def cli(search_strategies):
-    project_root = os.path.dirname(__file__)
-    default_db_path = os.path.join(project_root, "pg_weekly.db")
-    default_index_path = os.path.join(project_root, "index.bin")
-
     parser = argparse.ArgumentParser(
         prog="search",
         description="carries out search on the pg weekly issues",
     )
 
     parser.add_argument(
-        "--db", help="path to db file", default=default_db_path, dest="db_path"
+        "--db", help="path to db file", default=defaults.db_path, dest="db_path"
     )
 
     parser.add_argument(
         "--index",
         "-i",
         help="path to index file",
-        default=default_index_path,
+        default=defaults.index_path,
         dest="index_file_path",
     )
 

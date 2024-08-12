@@ -3,12 +3,10 @@ import argparse
 
 import duckdb
 
-project_root = os.path.dirname(__file__)
-db_path_default = os.path.join(project_root, "pg_weekly.db")
-schema_path_default = os.path.join(project_root, "schema.sql")
+from lib import defaults
 
 
-def init_db(db_path, schema_path=schema_path_default):
+def init_db(db_path, schema_path=defaults.schema_path):
     with duckdb.connect(db_path) as conn, open(schema_path, "r") as f:
         sql = f.read()
         got = conn.sql(sql)
@@ -22,12 +20,12 @@ def main():
     parser.add_argument(
         "--db",
         help="path to where db will be written to",
-        default=db_path_default,
+        default=defaults.db_path,
     )
     parser.add_argument(
         "--schema",
         help="path to schema file for init db",
-        default=schema_path_default,
+        default=defaults.schema_path,
     )
     args = parser.parse_args()
 
