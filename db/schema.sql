@@ -24,4 +24,14 @@ create table entries(
     foreign key(issue_id) references issues(id)
 );
 
+create sequence embeddings_metadata_id_sequence start 1;
+create table embeddings_metadata(
+    id integer primary key
+        default nextval('embeddings_metadata_id_sequence'),
+    model_name varchar not null unique,
+    normalized_model_name varchar not null,
+    dimension integer not null,
+    index_path varchar
+);
+
 commit;
