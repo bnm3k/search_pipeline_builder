@@ -1,7 +1,10 @@
 import os
+import sys
 import argparse
 
 import duckdb
+
+sys.path.insert(1, "/".join(os.path.realpath(__file__).split("/")[0:-2]))
 
 from lib import defaults
 
