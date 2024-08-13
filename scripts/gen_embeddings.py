@@ -72,7 +72,7 @@ def main():
         conn.execute("begin")
 
         norm_model_name = re.sub(r"[-\s\/]+", "-", model_name)
-        model = TextEmbedding(model_name)
+        model = TextEmbedding(model_name, cache_dir=defaults.models_dir)
         model_description = model._get_model_description(model_name)
         dimension = model_description["dim"]
 

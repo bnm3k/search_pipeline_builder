@@ -12,3 +12,4 @@ db_path = os.path.join(db_dir, "pg_weekly.db")
 schema_path = os.path.join(db_dir, "schema.sql")
 index_dir = os.path.join(db_dir, "index")
 model_name = "BAAI/bge-small-en-v1.5"
+models_dir = os.path.join(db_dir, "models")
