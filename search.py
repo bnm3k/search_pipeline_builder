@@ -6,7 +6,7 @@ import polars as pl
 from great_tables import GT
 
 from lib import defaults
-import lib.search_methods as s
+from lib.common import retrieve
 
 
 def output_to_great_tables(df, search_term, num_results, duration_ms):
@@ -102,6 +102,12 @@ class SearchBuilder:
         self.conn = conn
         return self
 
+    def add_searchers(self, searchers):
+        if searchers is not None:
+            for s in searchers:
+                self.add_searcher(s)
+        return self
+
     def add_searcher(self, searcher):
         assert (
             self.complete_add_searchers == False
@@ -123,18 +129,25 @@ class SearchBuilder:
         return self
 
     def build(self):
+        from lib.base_searchers import (
+            DuckDBFullTextSearcher,
+            VectorSearcher,
+            NullSearcher,
+        )
+        from lib.fusion import RRF
+
         assert self.conn is not None, "Set duckdb conn"
-        available_rerankers = {"rrf": lambda l, r: s.RRF(self.conn, l, r)}
+        available_rerankers = {"rrf": lambda l, r: RRF(self.conn, l, r)}
         available_searchers = {
-            "fts": lambda: s.DuckDBFullTextSearcher(self.conn),
-            "vec": lambda: s.VectorSearcher(
+            "fts": lambda: DuckDBFullTextSearcher(self.conn),
+            "vec": lambda: VectorSearcher(
                 self.conn, model_name=defaults.model_name
             ),
         }
 
         assert self.l is not None, "Must include at least one searcher"
         left_searcher = available_searchers[self.l]()
-        right_searcher = s.NullSearcher()
+        right_searcher = NullSearcher()
         if self.r is not None:
             right_searcher = available_searchers[self.r]()
 
@@ -168,13 +181,16 @@ def main():
     output_to_cli = args.output_to_cli
     with duckdb.connect(db_path, read_only=True) as conn:
         b = SearchBuilder()
-        for searcher in args.searchers:
-            b.add_searcher(searcher)
-        searcher = b.add_reranker(args.rerank_method).set_conn(conn).build()
+        searcher = (
+            b.add_searchers(args.searchers)
+            .add_reranker(args.rerank_method)
+            .set_conn(conn)
+            .build()
+        )
         max_count = args.max_count
 
         start = time.time_ns()
-        results_tbl = s.retrieve(conn, searcher, search_term, max_count)
+        results_tbl = retrieve(conn, searcher, search_term, max_count)
         end = time.time_ns()
         duration_ms = (end - start) / 1000000
 
