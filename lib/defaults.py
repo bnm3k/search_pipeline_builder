@@ -1,17 +1,16 @@
-import os
 from pathlib import Path
 
-_curr_dir = Path(os.path.dirname(__file__))
+_curr_file = Path(__file__)
+_curr_dir: Path = _curr_file.parent
 
-project_root = _curr_dir.parent.absolute()
+project_root: Path = _curr_dir.parent.absolute()
+data_dir = project_root.joinpath("data")
 
-data_dir = os.path.join(project_root, "data")
+raw_data_dir = data_dir.joinpath("raw_data")
 
-raw_data_dir = os.path.join(data_dir, "raw_data")
+db_path = data_dir.joinpath("pg_weekly.db")
+schema_path = data_dir.joinpath("schema.sql")
 
-db_path = os.path.join(data_dir, "pg_weekly.db")
-schema_path = os.path.join(data_dir, "schema.sql")
-
-index_dir = os.path.join(data_dir, "index")
-model_name = "BAAI/bge-small-en-v1.5"
-models_dir = os.path.join(data_dir, "models")
+index_dir = data_dir.joinpath("index")
+default_model_name = "BAAI/bge-small-en-v1.5"
+models_dir = data_dir.joinpath("models")
