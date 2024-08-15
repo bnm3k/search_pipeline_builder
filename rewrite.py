@@ -296,6 +296,36 @@ class MSMarcoCrossEncoder(Reranker):
         return SearchResult(reranked_results, RankMetric.SCORE, sorted=False)
 
 
+class JinaRerankerV2(Reranker):
+    """Note, is licensed under CC"""
+
+    def __init__(self, conn):
+        from transformers import AutoModelForSequenceClassification
+
+        self.conn = conn
+
+        model = AutoModelForSequenceClassification.from_pretrained(
+            "jinaai/jina-reranker-v2-base-multilingual",
+            torch_dtype="auto",
+            trust_remote_code=True,
+        )
+
+        model.to("cuda")  # or 'cpu' if no GPU is available
+        model.eval()
+        self.model = model
+
+    def rerank(self, query: str, search_result: SearchResult) -> SearchResult:
+        docs = self.retrieve_docs(search_result.tbl)
+
+        # rerank
+        sentence_pairs = [[query, doc] for doc in docs["doc"].to_pylist()]
+        scores = self.model.compute_score(sentence_pairs, max_length=1024)
+        reranked_results = pa.Table.from_arrays(
+            [docs["id"], scores], names=["id", "score"]
+        )
+        return SearchResult(reranked_results, RankMetric.SCORE, sorted=False)
+
+
 # ============================================================================
 def create_search_fn(
     base_searchers: BaseSearcher | list[BaseSearcher],
@@ -345,6 +375,7 @@ def main():
         base_searchers = [keyword_search, semantic_search]
         fusion_method = ReciprocalRankFusion()
         reranker = MSMarcoCrossEncoder(conn)
+        # reranker = JinaRerankerV2(conn)
         search = create_search_fn(
             [keyword_search, semantic_search],
             fusion_method=fusion_method,
