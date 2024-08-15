@@ -3,19 +3,22 @@
 ## Overview
 
 Builder for combining keyword and semantic search, fusion methods and rerankers
-to create a search pipeline. **[Arrow](https://arrow.apache.org/overview/)**
-format is used for passing data between nodes in the pipeline.
+to create a search pipeline. [Arrow](https://arrow.apache.org/overview/) format
+is used for passing data between nodes in the pipeline.
 [DuckDB](https://duckdb.org/) is used as the primary document store, metadata
-store, full-text search index, vector store and also for ancillary tasks. A
-pipeline consists of the following components:
+store, full-text search index, vector store and also for ancillary tasks.
+
+A pipeline consists of the following components:
 
 - Base searchers
 - Fusion methods
 - Rerankers
 
 The `create_search_fn` is then used to create a search function based on the
-components provided. `create_search_fn` also carries validation, for example, it
-does not make sense to set a fusion method if you've only got one base searcher.
+components provided. `create_search_fn` also carries out validation; for
+example, it does not make sense to set a fusion method if you've only got one
+base searcher.
+
 `create_search_fn` has the following signature:
 
 ```python
@@ -41,10 +44,8 @@ class BaseSearcher(ABC):
 ```
 
 For **keyword-based search**, also known as lexical search, DuckDB's
-[FTS, Full Text Search Extension](https://duckdb.org/2021/01/25/full-text-search.html)
-is used. Unless you are using a reranking method that gets slower the more
-documents you rerank, it is recommended that you do not apply a limit/max-count
-when using DuckDB's FTS. To create a DuckDB FTS base searcher, provide the
+[Full Text Search Extension](https://duckdb.org/2021/01/25/full-text-search.html),
+abbreviated as FTS, is used. To create a DuckDB FTS base searcher, provide the
 connection:
 
 ```python
@@ -58,15 +59,15 @@ results = base_searcher.search(query)
 For **semantic search**, [FastEmbed](https://qdrant.github.io/fastembed/) is
 used for both generating and querying embeddings. All FastEmbed
 [dense text embedding models](https://qdrant.github.io/fastembed/examples/Supported_Models/)
-are supported out of the box. DuckDB is used to store the vectors and also the
-model metadata (such as the dimensions). If you've got a few documents that you
-are embedding, let's say 100s, then you probably do not need to add a vector
+are supported out of the box. DuckDB is used to store the vectors and also for
+the model metadata (such as the dimensions). If you've got a few documents that
+you are embedding, let's say 100s, then you probably do not need to add a vector
 index to speed up similarity search - DuckDB's
 [Array similarity](https://duckdb.org/docs/sql/functions/array.html) functions
 will work just fine. However, with a large number of documents, you might have
 to add an index for fast approximate search. For various reasons and possible
 bugs that I have explored in
-[my blog](https://bnm3k.github.io/blog/vss-duckdb-caveats), I do not use
+[my blog post](https://bnm3k.github.io/blog/vss-duckdb-caveats), I do not use
 DuckDB's built in vector index. Instead, I have opted for
 [hnswlib](https://github.com/nmslib/hnswlib) for vector indexing. To create a
 Vector Similarity base searcher, provide the connection (for fetching metadata
@@ -107,7 +108,7 @@ The simplest fusion method is to concatenate the results. Hence **Chain Fusion**
 which is modeled after the
 [Rust's Chain Iterator](https://doc.rust-lang.org/beta/std/iter/struct.Chain.html).
 Use this if you are going to apply reranking upstream and you do not care about
-the scores assigned by base searchers. To rephrase it differently, since
+the scores assigned by the base searchers. To rephrase it differently, since
 separate base searchers assign separate score metrics, concatenating them
 without normalizing or fusing the scores in some way results in a _garbage_
 scores that should not be relied on. However, if you are going to apply
@@ -121,12 +122,12 @@ one base searcher:
 There is also **Reciprocal Rank Fusion** or RRF. RRF is described in this
 [paper](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf). It is a neat
 and efficient way of combining and assigning scores to documents from different
-results based on their respective ranks (rather than scores) within those result
-sets. As such it can also be considered a reranking method. If you are using a
-DuckDB FTS base searcher and did not set a limit for it, it is recommended that
-you do so for RRF when using it, otherwise, you do not need to set `max_count`
-for it. There is also the `k` parameter but it's best to leave it at 60, which
-the authors recommend
+results based on their respective ranks (rather than scores). As such it can
+also be considered a reranking method. If you are using a DuckDB FTS base
+searcher and did not set a limit for it, it is recommended that you do so for
+RRF when using it, otherwise, you do not need to set `max_count` for it. There
+is also the `k` parameter but it's best to leave it at 60, which the authors
+recommend
 
 ```python
 fusion_method = ReciprocalRankFusion()
