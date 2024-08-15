@@ -90,15 +90,15 @@ def main():
     query = " ".join(args.search_terms)
     output_to_cli = args.output_to_cli
     model_name = defaults.default_model_name
-    max_count = args.max_count
+    max_count = args.max_count  # ignored for now
 
     with duckdb.connect(str(db_path), read_only=True) as conn:
         # base searcher
-        keyword_search = DuckDBFullTextSearcher(conn, max_count=None)
+        keyword_search = DuckDBFullTextSearcher(conn, max_count=50)
         semantic_search = VectorSimilaritySearcher(
             conn,
-            model_name=defaults.default_model_name,
-            max_count=max_count,
+            model_name="BAAI/bge-small-en-v1.5",
+            max_count=50,
             use_index=True,
         )
 

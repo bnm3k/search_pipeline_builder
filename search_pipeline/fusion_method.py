@@ -70,4 +70,6 @@ class ReciprocalRankFusion(FusionMethod):
             )
             .drop("ranks")
         )
+        if self.max_count is not None:
+            df = df.limit(self.max_count)
         return SearchResult(df.to_arrow(), RankMetric.SCORE, sorted=False)
