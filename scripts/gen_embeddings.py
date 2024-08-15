@@ -99,8 +99,8 @@ def main():
             insert into embeddings_{model_id} by name
             (select
                 id,
-                embed(title || '\n' || coalesce(content, '')) as vec
-            from entries)
+                embed(doc) as vec
+            from documents)
             """
         )
         print(

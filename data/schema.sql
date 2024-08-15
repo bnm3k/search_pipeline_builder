@@ -24,6 +24,14 @@ create table entries(
     foreign key(issue_id) references issues(id)
 );
 
+create view documents(id, doc) as
+select
+    e.id,
+    e.title || '\n' ||
+    coalesce(e.author, '') || '\n' ||
+    coalesce(e.content, '') || '\n' ||
+    coalesce(e.tag, '') as doc
+from entries e
 
 create sequence embeddings_metadata_id_sequence start 1;
 create table embeddings_metadata(
