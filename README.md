@@ -235,9 +235,11 @@ Distributed under the MIT License. See LICENSE for more information.
 
 ## TODO / Future Additions
 
-- **Make more generic**: The project started of as a way of creating a full-text
-  search over Postgres Weekly Newsletter listings so some parts of the code-base
-  are still tightly bound to that use-case
+- **Make more generic**: Or rather, make into a re-usable library. The project
+  started of as a way of creating a full-text search over Postgres Weekly
+  Newsletter listings (checkout this branch:
+  [pg_weekly_search](https://github.com/bnm3k/search_pipeline_builder/tree/pg_weekly_search))
+  so some parts of the code-base are still tightly bound to that use-case
 - **Pre-filters** and **Post-filters**: add ability to filter documents e.g. on
   publish date or author before carrying out search and also after
 - **Query Throughput**: use multi-processing or
