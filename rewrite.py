@@ -296,6 +296,34 @@ class MSMarcoCrossEncoder(Reranker):
         return SearchResult(reranked_results, RankMetric.SCORE, sorted=False)
 
 
+class ColbertReranker(Reranker):
+    def __init__(self, conn, max_count):
+        from ragatouille import RAGPretrainedModel
+
+        self.conn = conn
+        self.colbert = RAGPretrainedModel.from_pretrained(
+            "colbert-ir/colbertv2.0"
+        )
+        self.max_count = 5
+
+    def rerank(self, query: str, search_result: SearchResult) -> SearchResult:
+        docs = self.retrieve_docs(search_result.tbl)
+        reranked_docs = self.colbert.rerank(
+            query=query,
+            documents=[d for d in docs["doc"].to_pylist()],
+            k=self.max_count,
+        )
+        doc_ids = docs["id"].to_pylist()
+        reranked_results = pa.Table.from_arrays(
+            [
+                (doc_ids[r["result_index"]] for r in reranked_docs),
+                (r["score"] for r in reranked_docs),
+            ],
+            names=["id", "score"],
+        )
+        return SearchResult(reranked_results, RankMetric.SCORE, sorted=False)
+
+
 class JinaRerankerV2(Reranker):
     """Note, is licensed under CC"""
 
@@ -374,8 +402,9 @@ def main():
         )
         base_searchers = [keyword_search, semantic_search]
         fusion_method = ReciprocalRankFusion()
-        reranker = MSMarcoCrossEncoder(conn)
+        # reranker = MSMarcoCrossEncoder(conn)
         # reranker = JinaRerankerV2(conn)
+        reranker = ColbertReranker(conn, max_count=10)
         search = create_search_fn(
             [keyword_search, semantic_search],
             fusion_method=fusion_method,
