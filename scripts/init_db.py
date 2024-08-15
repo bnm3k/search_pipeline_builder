@@ -23,12 +23,12 @@ def main():
     parser.add_argument(
         "--db",
         help="path to where db will be written to",
-        default=defaults.db_path,
+        default=str(defaults.db_path),
     )
     parser.add_argument(
         "--schema",
         help="path to schema file for init db",
-        default=defaults.schema_path,
+        default=str(defaults.schema_path),
     )
     args = parser.parse_args()
 

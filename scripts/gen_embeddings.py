@@ -34,15 +34,12 @@ def cli():
     parser.add_argument(
         "--mode-name",
         help="name of text embedding model",
-        default=defaults.model_name,
+        default=defaults.default_model_name,
         dest="model_name",
     )
 
     args = parser.parse_args()
     return args
-
-
-import os, sys
 
 
 def main():
@@ -56,7 +53,7 @@ def main():
     print(f"DB: {db_path}")
     print(f"Model: {model_name}")
 
-    with duckdb.connect(db_path) as conn:
+    with duckdb.connect(str(db_path)) as conn:
         # function has to be registered before transaction begins
         def embed_fn(documents):
             embeddings = model.embed(documents.to_numpy())
@@ -71,18 +68,19 @@ def main():
         )
         conn.execute("begin")
 
-        norm_model_name = re.sub(r"[-\s\/]+", "-", model_name)
-        model = TextEmbedding(model_name, cache_dir=defaults.models_dir)
+        model = TextEmbedding(model_name, cache_dir=str(defaults.models_dir))
         model_description = model._get_model_description(model_name)
         dimension = model_description["dim"]
+        norm_name = re.sub(r"[-\s\/]+", "-", model_name)
+        index_filename = f"{norm_name}.bin"
 
         res = conn.execute(
             """
-        insert into embeddings_metadata(model_name, normalized_model_name, dimension)
+        insert into embeddings_metadata(model_name, dimension, index_filename)
         values ($1,$2,$3)
         returning id
         """,
-            [model_name, norm_model_name, dimension],
+            [model_name, dimension, index_filename],
         ).fetchone()
 
         model_id = res[0]
@@ -90,7 +88,7 @@ def main():
         conn.execute(
             f"""
         create or replace table embeddings_{model_id}(
-            id int unique not null references entries(id),
+            id uinteger unique not null references entries(id),
             vec FLOAT[{dimension}] not null
         );
         """,
@@ -110,15 +108,7 @@ def main():
         )
 
         # build index
-        index_path = os.path.join(index_dir, f"{norm_model_name}.bin")
-        conn.execute(
-            """
-        update embeddings_metadata
-        set index_path=$2
-        where id = $1
-        """,
-            [model_id, index_path],
-        )
+        index_filepath = index_dir.joinpath(index_filename)
         num_elements = conn.sql(
             f"select count(*) as count from embeddings_{model_id}"
         ).fetchone()[0]
@@ -137,8 +127,8 @@ def main():
         index.set_ef(50)  # ef should always be greater than k
 
         # overwrite index file
-        index.save_index(index_path)
-        print(f"Create index for model {model_id} at {index_path}")
+        index.save_index(str(index_filepath))
+        print(f"Create index for model {model_id} at {index_filepath}")
 
         conn.execute("commit")
 

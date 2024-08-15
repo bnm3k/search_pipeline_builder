@@ -316,12 +316,12 @@ def cli():
     parser.add_argument(
         "--db",
         help="path to the db file",
-        default=defaults.db_path,
+        default=str(defaults.db_path),
     )
     parser.add_argument(
         "--data_dir",
         help="path to dir where raw html from pg weekly is stored",
-        default=defaults.raw_data_dir,
+        default=str(defaults.raw_data_dir),
     )
     args = parser.parse_args()
     return args
