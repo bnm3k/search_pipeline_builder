@@ -6,7 +6,7 @@ import duckdb
 
 sys.path.insert(1, "/".join(os.path.realpath(__file__).split("/")[0:-2]))
 
-from lib import defaults
+from search_pipeline import defaults
 
 
 def init_db(db_path, schema_path=defaults.schema_path):

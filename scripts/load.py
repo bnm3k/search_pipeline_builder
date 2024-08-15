@@ -18,7 +18,7 @@ from init_db import init_db
 
 sys.path.insert(1, "/".join(os.path.realpath(__file__).split("/")[0:-2]))
 
-from lib import defaults
+from search_pipeline import defaults
 
 
 @contextlib.contextmanager
