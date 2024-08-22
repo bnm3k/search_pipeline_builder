@@ -43,7 +43,10 @@ class BaseSearcher(ABC):
         ...
 ```
 
-For **keyword-based search**, also known as lexical search, DuckDB's
+For **keyword-based search**, also known as lexical search, there are two base
+searchers: DuckDB and Tantivy:
+
+For DuckDB, DuckDB's
 [Full Text Search Extension](https://duckdb.org/2021/01/25/full-text-search.html),
 abbreviated as FTS, is used. To create a DuckDB FTS base searcher, provide the
 connection:
@@ -53,6 +56,17 @@ conn = DuckDB(db_path)
 base_searcher = DuckDBFullTextSearcher(conn)
 
 query = "Who framed Roger Rabbit"
+results = base_searcher.search(query)
+```
+
+With [Tantivy](https://github.com/quickwit-oss/tantivy-py), you only need to
+provide the `max_count` when initializing:
+
+```python
+conn = DuckDB(db_path)
+base_searcher = TantivySearcher(50)
+
+query = "Performance Tuning"
 results = base_searcher.search(query)
 ```
 
