@@ -14,3 +14,5 @@ schema_path = data_dir.joinpath("schema.sql")
 index_dir = data_dir.joinpath("index")
 default_model_name = "BAAI/bge-small-en-v1.5"
 models_dir = data_dir.joinpath("models")
+
+tantivy_dir = data_dir.joinpath("tantivy")

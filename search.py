@@ -94,7 +94,7 @@ def main():
 
     with duckdb.connect(str(db_path), read_only=True) as conn:
         # base searcher
-        keyword_search = DuckDBFullTextSearcher(conn, max_count=50)
+        keyword_search = TantivySearcher(max_count=50)
         semantic_search = VectorSimilaritySearcher(
             conn,
             model_name="BAAI/bge-small-en-v1.5",

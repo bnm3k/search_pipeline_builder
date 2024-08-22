@@ -3,9 +3,10 @@ from typing import Optional
 from pathlib import Path
 
 import pyarrow as pa
+from tantivy import SchemaBuilder, Index
 
 from .common import SearchResult, RankMetric
-from .defaults import index_dir, models_dir
+from .defaults import index_dir, models_dir, tantivy_dir
 
 
 class BaseSearcher(ABC):
@@ -33,7 +34,11 @@ class NullSearcher(BaseSearcher):
 
 
 class DuckDBFullTextSearcher(BaseSearcher):
-    def __init__(self, conn, max_count: Optional[int] = None):
+    def __init__(
+        self,
+        conn,
+        max_count: Optional[int] = None,
+    ):
         self.conn = conn
         self.rank_metric = RankMetric.SCORE
         self.max_count = max_count
@@ -48,6 +53,37 @@ class DuckDBFullTextSearcher(BaseSearcher):
             sql += f"\n limit {self.max_count}"
         tbl = self.conn.execute(sql, [query]).arrow()
         return SearchResult(tbl, self.rank_metric, sorted=False)
+
+
+class TantivySearcher(BaseSearcher):
+    def __init__(self, max_count: int, index_path=tantivy_dir):
+        self.rank_metric = RankMetric.SCORE
+        self.max_count = max_count
+        schema = (
+            SchemaBuilder()
+            .add_integer_field("id", indexed=True, stored=True)
+            .add_text_field("title")
+            .add_text_field("author")
+            .add_text_field("content")
+            .add_text_field("tag")
+            .build()
+        )
+        self.index = Index(schema=schema, path=str(index_path))
+
+    def search(self, query: str) -> SearchResult:
+        searcher = self.index.searcher()
+        parsed_query = self.index.parse_query(
+            query, ["title", "author", "content", "tag"]
+        )
+        results = searcher.search(parsed_query, self.max_count)
+        scores = (v[0] for v in results.hits)
+        ids = (searcher.doc(v[1])["id"][0] for v in results.hits)
+
+        tbl = pa.Table.from_arrays(
+            [pa.array(ids, type=pa.uint32()), pa.array(scores)],
+            names=["id", "distance"],
+        )
+        return SearchResult(tbl, self.rank_metric, sorted=True)
 
 
 class VectorSimilaritySearcher(BaseSearcher):
